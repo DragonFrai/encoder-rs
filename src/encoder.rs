@@ -1,7 +1,6 @@
 use embedded_hal::digital::v2::InputPin;
 use fugit::MillisDurationU32;
-use crate::rotary::{RotaryError, Rotation};
-use crate::{Rotary};
+use crate::rotary::{Rotary, RotaryError, Rotation};
 use crate::button::Button;
 use crate::button;
 

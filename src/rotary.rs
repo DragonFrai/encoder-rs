@@ -145,10 +145,10 @@ impl<A, B, T, const ROTATION_DIVIDER: i8> TimeRotary<A, B, T, ROTATION_DIVIDER>
                 None => Ok(Rotation(base)),
                 Some(last) => {
                     let dt = now.duration_since(last);
-                    match dt {
+                    match dt.to_millis() {
                         dt if dt <= LIMITED_ROTATION_MS => Ok(Rotation(base * self.acceleration as i32)),
                         dt if dt >= SINGLE_ROTATION_MS => Ok(Rotation(base)), // handle 0 acceleraton?
-                        _ => {
+                        dt => {
                             let low_plus_dt = dt - LIMITED_ROTATION_MS;
                             let size = SINGLE_ROTATION_MS - LIMITED_ROTATION_MS;
                             let acc = self.acceleration as u32;
