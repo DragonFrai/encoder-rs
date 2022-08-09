@@ -1,0 +1,148 @@
+use crate::{Clock, Instant};
+use embedded_hal::digital::v2::InputPin;
+use fugit::MillisDurationU32;
+
+#[derive(Copy, Clone, Debug)]
+pub enum Action {
+    None,
+    Press,
+    Held,
+    Click,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum TimeAction {
+    None,
+    Press,
+    Held(MillisDurationU32),
+    Click(MillisDurationU32),
+}
+
+pub enum Error<K> {
+    KPin(K),
+}
+
+#[inline]
+fn update_state(state: &mut u8, pressed: bool) -> u8 {
+    let s = match pressed {
+        true => (*state >> 1) | 0b10,
+        false => *state >> 1,
+    };
+    *state = s;
+    s
+}
+
+pub struct Button<K, const INVERTED: bool = false>
+where
+    K: InputPin,
+{
+    k_pin: K,
+    state: u8,
+    handle_press: bool,
+}
+
+impl<K, const INVERTED: bool> Button<K, INVERTED>
+where
+    K: InputPin,
+{
+    pub fn new(k_pin: K) -> Self {
+        Self {
+            k_pin,
+            state: 0u8,
+            handle_press: false,
+        }
+    }
+
+    pub fn handle_press(&mut self) {
+        if matches!(self.state, 0b10) {
+            self.handle_press = true;
+        }
+    }
+
+    pub fn update(&mut self) -> Result<Action, Error<K::Error>> {
+        let pressed = self.k_pin.is_high().map_err(Error::KPin)? ^ INVERTED;
+        let s = update_state(&mut self.state, pressed);
+        let r = match s {
+            0b01 if self.handle_press => {
+                self.handle_press = false;
+                Action::None
+            }
+            0b11 if self.handle_press => Action::None,
+            0b00 => Action::None,
+            0b01 => Action::Click,
+            0b10 => Action::Press,
+            0b11 => Action::Held,
+            _ => unreachable!(),
+        };
+        Ok(r)
+    }
+}
+
+pub struct TimeButton<K, T, const INVERTED: bool = false>
+where
+    K: InputPin,
+    T: Instant,
+{
+    button: Button<K, INVERTED>,
+    press_at: T, // none when press handled
+}
+
+impl<K, T: Instant, const INVERTED: bool> TimeButton<K, T, INVERTED>
+where
+    K: InputPin,
+{
+    pub fn new(k_pin: K) -> Self {
+        Self {
+            button: Button::new(k_pin),
+            press_at: T::zero(),
+        }
+    }
+
+    pub fn handle_press(&mut self) {
+        self.button.handle_press()
+    }
+
+    pub fn update(&mut self, now: T) -> Result<TimeAction, Error<K::Error>> {
+        let act = self.button.update()?;
+        let act = match act {
+            Action::None => TimeAction::None,
+            Action::Press => {
+                self.press_at = now;
+                TimeAction::Press
+            }
+            Action::Held => TimeAction::Held(now.duration_since(self.press_at)),
+            Action::Click => TimeAction::Click(now.duration_since(self.press_at)),
+        };
+        Ok(act)
+    }
+}
+
+pub struct ClockButton<K, C, const INVERTED: bool = false>
+where
+    K: InputPin,
+    C: Clock,
+{
+    button: TimeButton<K, C::Instant, INVERTED>,
+    clock: C,
+}
+
+impl<K, C, const INVERTED: bool> ClockButton<K, C, INVERTED>
+where
+    K: InputPin,
+    C: Clock,
+{
+    pub fn new(k_pin: K, clock: C) -> Self {
+        Self {
+            button: TimeButton::new(k_pin),
+            clock,
+        }
+    }
+
+    pub fn handle_press(&mut self) {
+        self.button.handle_press()
+    }
+
+    pub fn update(&mut self) -> Result<TimeAction, Error<K::Error>> {
+        self.button.update(self.clock.now())
+    }
+}

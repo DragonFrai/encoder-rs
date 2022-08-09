@@ -1,8 +1,9 @@
 [package]
-name = "encoder"
-version = "0.1.0"
+name = "simple_encoder"
+version = "0.2.0"
 edition = "2021"
 authors = ["Vladislav Podporkin"]
+categories = ["embedded", "encoder", "button"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -11,3 +12,6 @@ authors = ["Vladislav Podporkin"]
 [dependencies.embedded-hal]
 version = "^0.2"
 features = ["unproven"]
+
+[dependencies.fugit]
+version = "0.3.6"
