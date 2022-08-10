@@ -34,8 +34,8 @@ impl Rotation {
     pub fn direction(self) -> Direction {
         match self.0 {
             0 => Direction::None,
-            1..=i32::MAX => Direction::Cw,
-            i32::MIN..=-1 => Direction::Ccw,
+            1..=i32::MAX => Direction::Ccw,
+            i32::MIN..=-1 => Direction::Cw,
         }
     }
 
@@ -81,31 +81,41 @@ where
         let a_low = self.a_pin.is_low().map_err(RotaryError::APin)?;
         let b_low = self.b_pin.is_low().map_err(RotaryError::BPin)?;
 
-        let mut ab_state = (self.state & 0x0F) >> 2;
-        if a_low {
-            ab_state |= 0b1000;
-        }
-        if b_low {
-            ab_state |= 0b0100;
-        }
-        self.state = ab_state;
-
-        let switch_rot = match ab_state {
-            0b0001 | 0b0111 | 0b1000 | 0b1110 => 1i8,
-            0b0010 | 0b0100 | 0b1011 | 0b1101 => -1i8,
-            _ => 0i8,
+        let state = self.state >> 2 | match (a_low, b_low) {
+            (false, false) => 0b0000,
+            (false, true) => 0b0100,
+            (true, false) => 0b1000,
+            (true, true) => 0b1100,
         };
-        let switches = self.switches + switch_rot;
+        self.state = state;
 
-        let rotation = if switches.abs() == ROTATION_DIVIDER {
-            self.switches = 0;
-            Rotation(switches.signum() as i32)
-        } else {
-            self.switches = switches;
-            Rotation(0)
+        let overflow_switches = |switch_origin: &mut i8, switches: i8| {
+            if switches.abs() >= ROTATION_DIVIDER {
+                *switch_origin = 0;
+                Rotation(switches.signum() as i32)
+            } else {
+                *switch_origin = switches;
+                Rotation(0)
+            }
         };
 
-        Ok(rotation)
+        let rot = match state {
+            0b0001 | 0b0111 | 0b1110 | 0b1000 | 0b0110 => {
+                let switches = self.switches - 1;
+                overflow_switches(&mut self.switches, switches)
+            },
+            0b0010 | 0b1011 | 0b1101 | 0b0100 | 0b1001 => {
+                let switches = self.switches + 1;
+                overflow_switches(&mut self.switches, switches)
+            },
+            0b0000 | 0b0011 => {
+                let s = self.switches;
+                self.switches = 0;
+                Rotation(s.signum() as i32)
+            }
+            _ => Rotation(0),
+        };
+        Ok(rot)
     }
 }
 
