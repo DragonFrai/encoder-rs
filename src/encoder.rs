@@ -107,8 +107,11 @@ impl<A, B, K, const ROTATION_DIVIDER: i8> Encoder<A, B, K, ROTATION_DIVIDER>
                 EncoderAction::RotatePressed(rotation)
             },
             (false, true, button::ButtonAction::Press) => EncoderAction::Press,
-            (true, false, button::ButtonAction::Press) => unreachable!(),
-            (true, true, button::ButtonAction::Press) => unreachable!(),
+            (true, false, button::ButtonAction::Press) => {
+                EncoderAction::RotatePressed(rotation)
+            },
+            (true, true, button::ButtonAction::Press) =>
+                EncoderAction::None,
 
             (false, false, button::ButtonAction::Held) => {
                 self.rotated_on_hold = true;
@@ -187,8 +190,8 @@ impl<A, B, K, T, const ROTATION_DIVIDER: i8> TimeEncoder<A, B, K, T, ROTATION_DI
                 TimeEncoderAction::RotatePressed(rotation)
             },
             (false, true, button::TimeButtonAction::Press) => TimeEncoderAction::Press,
-            (true, false, button::TimeButtonAction::Press) => unreachable!(),
-            (true, true, button::TimeButtonAction::Press) => unreachable!(),
+            (true, false, button::TimeButtonAction::Press) => TimeEncoderAction::RotatePressed(rotation),
+            (true, true, button::TimeButtonAction::Press) => TimeEncoderAction::None,
 
             (false, false, button::TimeButtonAction::Held(_t)) => {
                 self.rotated_on_hold = true;
