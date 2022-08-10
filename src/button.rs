@@ -3,7 +3,7 @@ use embedded_hal::digital::v2::InputPin;
 use fugit::MillisDurationU32;
 
 #[derive(Copy, Clone, Debug)]
-pub enum Action {
+pub enum ButtonAction {
     None,
     Press,
     Held,
@@ -11,7 +11,7 @@ pub enum Action {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub enum TimeAction {
+pub enum TimeButtonAction {
     None,
     Press,
     Held(MillisDurationU32),
@@ -59,19 +59,19 @@ where
         }
     }
 
-    pub fn update(&mut self) -> Result<Action, Error<K::Error>> {
+    pub fn update(&mut self) -> Result<ButtonAction, Error<K::Error>> {
         let pressed = self.k_pin.is_high().map_err(Error::KPin)? ^ INVERTED;
         let s = update_state(&mut self.state, pressed);
         let r = match s {
             0b01 if self.handle_press => {
                 self.handle_press = false;
-                Action::None
+                ButtonAction::None
             }
-            0b11 if self.handle_press => Action::None,
-            0b00 => Action::None,
-            0b01 => Action::Click,
-            0b10 => Action::Press,
-            0b11 => Action::Held,
+            0b11 if self.handle_press => ButtonAction::None,
+            0b00 => ButtonAction::None,
+            0b01 => ButtonAction::Click,
+            0b10 => ButtonAction::Press,
+            0b11 => ButtonAction::Held,
             _ => unreachable!(),
         };
         Ok(r)
@@ -102,16 +102,16 @@ where
         self.button.handle_press()
     }
 
-    pub fn update(&mut self, now: T) -> Result<TimeAction, Error<K::Error>> {
+    pub fn update(&mut self, now: T) -> Result<TimeButtonAction, Error<K::Error>> {
         let act = self.button.update()?;
         let act = match act {
-            Action::None => TimeAction::None,
-            Action::Press => {
+            ButtonAction::None => TimeButtonAction::None,
+            ButtonAction::Press => {
                 self.press_at = now;
-                TimeAction::Press
+                TimeButtonAction::Press
             }
-            Action::Held => TimeAction::Held(now.duration_since(self.press_at)),
-            Action::Click => TimeAction::Click(now.duration_since(self.press_at)),
+            ButtonAction::Held => TimeButtonAction::Held(now.duration_since(self.press_at)),
+            ButtonAction::Click => TimeButtonAction::Click(now.duration_since(self.press_at)),
         };
         Ok(act)
     }
@@ -142,7 +142,7 @@ where
         self.button.handle_press()
     }
 
-    pub fn update(&mut self) -> Result<TimeAction, Error<K::Error>> {
+    pub fn update(&mut self) -> Result<TimeButtonAction, Error<K::Error>> {
         self.button.update(self.clock.now())
     }
 }

@@ -1,11 +1,11 @@
 use embedded_hal::digital::v2::InputPin;
 use fugit::MillisDurationU32;
-use crate::rotary::{Rotary, RotaryError, Rotation};
-use crate::button::Button;
-use crate::button;
+use crate::rotary::{Rotary, RotaryError, Rotation, TimeRotary};
+use crate::button::{Button, TimeButton};
+use crate::{button, Clock, Instant};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum Action {
+pub enum EncoderAction {
     None,
     Press,
     Held,
@@ -15,7 +15,7 @@ pub enum Action {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum TimeAction {
+pub enum TimeEncoderAction {
     None,
     Press,
     Held(MillisDurationU32),
@@ -59,17 +59,17 @@ impl<A, B, K> From<button::Error<K>> for EncoderError<A, B, K>
 // -----------
 
 // Энкодер с кнопкой
-pub struct Encoder<A, B, K> where A: InputPin, B: InputPin, K: InputPin {
+pub struct Encoder<A, B, K, const ROTATION_DIVIDER: i8> where A: InputPin, B: InputPin, K: InputPin {
     rotary: Rotary<A, B>,
     button: Button<K, true>,
     rotated_on_hold: bool,
 }
 
-impl<A, B, K> Encoder<A, B, K>
-where
-    A: InputPin,
-    B: InputPin,
-    K: InputPin,
+impl<A, B, K, const ROTATION_DIVIDER: i8> Encoder<A, B, K, ROTATION_DIVIDER>
+    where
+        A: InputPin,
+        B: InputPin,
+        K: InputPin,
 {
     pub fn new(a_pin: A, b_pin: B, k_pin: K) -> Self {
         let rotary = Rotary::new(a_pin, b_pin);
@@ -86,44 +86,158 @@ where
         self.button.handle_press()
     }
 
-    pub fn update(&mut self) -> Result<Action, EncoderError<A::Error, B::Error, K::Error>> {
+    pub fn update(&mut self) -> Result<EncoderAction, EncoderError<A::Error, B::Error, K::Error>> {
         let rotation = self.rotary.update()?;
         let btn_action = self.button.update()?;
 
         let act = match (self.rotated_on_hold, rotation.is_zero(), btn_action) {
-            (false, false, button::Action::None) => Action::Rotate(rotation),
-            (false, true, button::Action::None) => Action::None,
-            (true, false, button::Action::None) => unreachable!(),
-            (true, true, button::Action::None) => unreachable!(),
-
-            (false, false, button::Action::Press) => {
-                self.rotated_on_hold = true;
-                Action::RotatePressed(rotation)
-            },
-            (false, true, button::Action::Press) => Action::Press,
-            (true, false, button::Action::Press) => unreachable!(),
-            (true, true, button::Action::Press) => unreachable!(),
-
-            (false, false, button::Action::Held) => {
-                self.rotated_on_hold = true;
-                Action::RotatePressed(rotation)
-            },
-            (false, true, button::Action::Held) => Action::Held,
-            (true, false, button::Action::Held) => Action::None,
-            (true, true, button::Action::Held) => Action::None,
-
-            (false, false, button::Action::Click) => Action::Click,
-            (false, true, button::Action::Click) => Action::Click,
-            (true, false, button::Action::Click) => {
+            (false, false, button::ButtonAction::None) => EncoderAction::Rotate(rotation),
+            (false, true, button::ButtonAction::None) => EncoderAction::None,
+            (true, false, button::ButtonAction::None) => {
                 self.rotated_on_hold = false;
-                Action::Click
+                EncoderAction::None
             },
-            (true, true, button::Action::Click) => {
+            (true, true, button::ButtonAction::None) => {
                 self.rotated_on_hold = false;
-                Action::Click
+                EncoderAction::None
+            },
+
+            (false, false, button::ButtonAction::Press) => {
+                self.rotated_on_hold = true;
+                EncoderAction::RotatePressed(rotation)
+            },
+            (false, true, button::ButtonAction::Press) => EncoderAction::Press,
+            (true, false, button::ButtonAction::Press) => unreachable!(),
+            (true, true, button::ButtonAction::Press) => unreachable!(),
+
+            (false, false, button::ButtonAction::Held) => {
+                self.rotated_on_hold = true;
+                EncoderAction::RotatePressed(rotation)
+            },
+            (false, true, button::ButtonAction::Held) => EncoderAction::Held,
+            (true, false, button::ButtonAction::Held) => {
+                EncoderAction::RotatePressed(rotation)
+            },
+            (true, true, button::ButtonAction::Held) => EncoderAction::None,
+
+            (false, false, button::ButtonAction::Click) => EncoderAction::Click,
+            (false, true, button::ButtonAction::Click) => EncoderAction::Click,
+            (true, false, button::ButtonAction::Click) => {
+                self.rotated_on_hold = false;
+                EncoderAction::None
+            },
+            (true, true, button::ButtonAction::Click) => {
+                self.rotated_on_hold = false;
+                EncoderAction::None
             },
         };
 
         Ok(act)
+    }
+}
+
+
+// Энкодер с кнопкой
+pub struct TimeEncoder<A, B, K, T, const ROTATION_DIVIDER: i8> where A: InputPin, B: InputPin, K: InputPin, T: Instant {
+    rotary: TimeRotary<A, B, T, ROTATION_DIVIDER>,
+    button: TimeButton<K, T, true>,
+    rotated_on_hold: bool,
+}
+
+impl<A, B, K, T, const ROTATION_DIVIDER: i8> TimeEncoder<A, B, K, T, ROTATION_DIVIDER>
+    where
+        A: InputPin,
+        B: InputPin,
+        K: InputPin,
+        T: Instant,
+{
+    pub fn new(a_pin: A, b_pin: B, k_pin: K) -> Self {
+        let rotary = TimeRotary::new(a_pin, b_pin);
+        let button = TimeButton::new(k_pin);
+        Self {
+            rotary,
+            button,
+            rotated_on_hold: false,
+        }
+    }
+
+    pub fn handle_press(&mut self) {
+        self.rotated_on_hold = false;
+        self.button.handle_press()
+    }
+
+    pub fn update(&mut self, now: T) -> Result<TimeEncoderAction, EncoderError<A::Error, B::Error, K::Error>> {
+        let rotation = self.rotary.update(now)?;
+        let btn_action = self.button.update(now)?;
+
+        let act = match (self.rotated_on_hold, rotation.is_zero(), btn_action) {
+            (false, false, button::TimeButtonAction::None) => TimeEncoderAction::Rotate(rotation),
+            (false, true, button::TimeButtonAction::None) => TimeEncoderAction::None,
+            (true, false, button::TimeButtonAction::None) => {
+                self.rotated_on_hold = false;
+                TimeEncoderAction::None
+            },
+            (true, true, button::TimeButtonAction::None) => {
+                self.rotated_on_hold = false;
+                TimeEncoderAction::None
+            },
+
+            (false, false, button::TimeButtonAction::Press) => {
+                self.rotated_on_hold = true;
+                TimeEncoderAction::RotatePressed(rotation)
+            },
+            (false, true, button::TimeButtonAction::Press) => TimeEncoderAction::Press,
+            (true, false, button::TimeButtonAction::Press) => unreachable!(),
+            (true, true, button::TimeButtonAction::Press) => unreachable!(),
+
+            (false, false, button::TimeButtonAction::Held(_t)) => {
+                self.rotated_on_hold = true;
+                TimeEncoderAction::RotatePressed(rotation)
+            },
+            (false, true, button::TimeButtonAction::Held(t)) => TimeEncoderAction::Held(t),
+            (true, false, button::TimeButtonAction::Held(t)) => {
+                TimeEncoderAction::RotatePressed(rotation)
+            },
+            (true, true, button::TimeButtonAction::Held(_)) => TimeEncoderAction::None,
+
+            (false, false, button::TimeButtonAction::Click(t)) => TimeEncoderAction::Click(t),
+            (false, true, button::TimeButtonAction::Click(t)) => TimeEncoderAction::Click(t),
+            (true, false, button::TimeButtonAction::Click(_)) => {
+                self.rotated_on_hold = false;
+                TimeEncoderAction::None
+            },
+            (true, true, button::TimeButtonAction::Click(_)) => {
+                self.rotated_on_hold = false;
+                TimeEncoderAction::None
+            },
+        };
+
+        Ok(act)
+    }
+}
+
+// Энкодер с кнопкой
+pub struct ClockEncoder<A, B, K, C, const ROTATION_DIVIDER: i8> where A: InputPin, B: InputPin, K: InputPin, C: Clock {
+    encoder: TimeEncoder<A, B, K, C::Instant, ROTATION_DIVIDER>,
+    clock: C,
+}
+
+impl<A, B, K, C, const ROTATION_DIVIDER: i8> ClockEncoder<A, B, K, C, ROTATION_DIVIDER>
+    where
+        A: InputPin,
+        B: InputPin,
+        K: InputPin,
+        C: Clock,
+{
+    pub fn new(a_pin: A, b_pin: B, k_pin: K, clock: C) -> Self {
+        Self { encoder: TimeEncoder::new(a_pin, b_pin, k_pin), clock }
+    }
+
+    pub fn handle_press(&mut self) {
+        self.encoder.handle_press()
+    }
+
+    pub fn update(&mut self) -> Result<TimeEncoderAction, EncoderError<A::Error, B::Error, K::Error>> {
+        self.encoder.update(self.clock.now())
     }
 }

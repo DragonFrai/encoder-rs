@@ -14,4 +14,4 @@ version = "^0.2"
 features = ["unproven"]
 
 [dependencies.fugit]
-version = "0.3.6"
+version = "^0.3"
