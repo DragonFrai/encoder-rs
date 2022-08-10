@@ -46,7 +46,7 @@ where
 impl<const NOM: u32, const DENOM: u32> Instant for fugit::Instant<u32, NOM, DENOM> {
     #[inline]
     fn duration_since(self, other: Self) -> MillisDurationU32 {
-        let dur = other - self;
+        let dur = self - other;
         dur.to_millis().millis()
     }
 
@@ -59,7 +59,7 @@ impl<const NOM: u32, const DENOM: u32> Instant for fugit::Instant<u32, NOM, DENO
 impl<const NOM: u32, const DENOM: u32> Instant for fugit::Instant<u64, NOM, DENOM> {
     #[inline]
     fn duration_since(self, other: Self) -> MillisDurationU32 {
-        let dur = other - self;
+        let dur = self - other;
         let millis = dur.to_millis();
         if millis <= u32::MAX as u64 {
             millis as u32

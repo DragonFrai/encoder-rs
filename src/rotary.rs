@@ -1,8 +1,8 @@
 use crate::time::{Clock, Instant};
 use embedded_hal::digital::v2::InputPin;
 
-const SINGLE_ROTATION_MS: u32 = 250;
-const LIMITED_ROTATION_MS: u32 = 50;
+const SINGLE_ROTATION_MS: u32 = 100;
+const LIMITED_ROTATION_MS: u32 = 20;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Direction {

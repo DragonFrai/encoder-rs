@@ -163,6 +163,9 @@ impl<A, B, K, T, const ROTATION_DIVIDER: i8> TimeEncoder<A, B, K, T, ROTATION_DI
             rotated_on_hold: false,
         }
     }
+pub fn set_acceleration(&mut self, acc: u16) {
+    self.rotary.set_acceleration(acc)
+}
 
     pub fn handle_press(&mut self) {
         self.rotated_on_hold = false;
