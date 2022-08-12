@@ -34,8 +34,8 @@ impl Rotation {
     pub fn direction(self) -> Direction {
         match self.0 {
             0 => Direction::None,
-            1..=i32::MAX => Direction::Ccw,
-            i32::MIN..=-1 => Direction::Cw,
+            1..=i32::MAX => Direction::Cw,
+            i32::MIN..=-1 => Direction::Ccw,
         }
     }
 
