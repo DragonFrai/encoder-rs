@@ -54,7 +54,7 @@ where
     }
 
     pub fn handle_press(&mut self) {
-        if matches!(self.state, 0b10) {
+        if matches!(self.state, 0b10 | 0b11) {
             self.handle_press = true;
         }
     }
